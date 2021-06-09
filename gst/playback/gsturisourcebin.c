@@ -99,6 +99,7 @@ struct _ChildSrcPadInfo
   guint event_probe_id;
   GstPad *demux_src_pad;
   GstCaps *cur_caps;            /* holds ref */
+  GstPad *ghost_pad;            /* ghostpad if any */
 
   /* Configured output slot, if any */
   OutputSlotInfo *output_slot;
@@ -658,11 +659,11 @@ new_demuxer_pad_added_cb (GstElement * element, GstPad * pad,
   /* If the demuxer handles buffering and is streams-aware, we can expose it
      as-is directly. We still add an event probe to deal with EOS */
   if (urisrc->demuxer_handles_buffering && urisrc->source_streams_aware) {
-    GstPad *ghostpad = create_output_pad (urisrc, pad);
+    info->ghost_pad = create_output_pad (urisrc, pad);
     GST_DEBUG_OBJECT (element,
         "New streams-aware demuxer pad %s:%s , exposing directly",
         GST_DEBUG_PAD_NAME (pad));
-    expose_output_pad (urisrc, ghostpad);
+    expose_output_pad (urisrc, info->ghost_pad);
     GST_URI_SOURCE_BIN_UNLOCK (urisrc);
   } else {
     GST_DEBUG_OBJECT (element, "new demuxer pad, name: <%s>. "
@@ -1359,6 +1360,11 @@ pad_removed_cb (GstElement * element, GstPad * pad, GstURISourceBin * urisrc)
     gst_pad_send_event (slot->sinkpad, event);
   } else {
     GST_LOG_OBJECT (urisrc, "Removed pad has no output slot");
+    if (urisrc->source_streams_aware) {
+      GST_DEBUG_OBJECT (info->ghost_pad,
+          "Streams-aware, removing pad immediately");
+      gst_element_remove_pad ((GstElement *) urisrc, info->ghost_pad);
+    }
   }
   GST_URI_SOURCE_BIN_UNLOCK (urisrc);
 
